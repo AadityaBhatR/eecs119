@@ -19,7 +19,7 @@
 --      On each wrap ("tick") the EPROM byte is latched and the address is
 --      incremented, so the EPROM has a whole sample period to settle
 --      (pipelining). Each sample is output as 16 PWM pulses: the output is
---      high while cnt(7 downto 0) < sample.
+--      set when cnt(7 downto 0) = 0 and cleared when it equals sample.
 --
 --  Inputs:
 --      CLK          - 32 MHz clock
@@ -40,7 +40,8 @@
 --
 --  Internal signals:
 --      cnt          - sample counter; low 8 bits are the PWM ramp
---      tick         - '1' on the last clock of each sample period
+--      tick         - '1' on the last clock of each sample period (registered)
+--      at_end       - '1' when addr is at the end of the message (registered)
 --      pressed      - synced switches, active high (0 = SW4 ... 3 = SW1)
 --      sel          - pressed switch with highest priority (0 = SW4 ... 3 = SW1)
 --      idx          - lookup table index (sel when idle, msg when playing)
@@ -59,6 +60,7 @@
 --      11/06/26  Aadi   Documentation Updates
 --      11/07/26  Aadi   Final TB Check
 --      11/07/26  Aadi   Start/end address lookup tables
+--      11/07/26  Aadi   Registered tick/at_end, equality pwm to fit XC9572
 --
 --------------------------------------------------------------------------------
 
@@ -90,7 +92,8 @@ architecture rtl of pwm is
     constant CNT_MAX : unsigned(CNT_BITS - 1 downto 0) := (others => '1');
 
     signal cnt       : unsigned(CNT_BITS - 1 downto 0) := (others => '0');
-    signal tick      : std_logic;
+    signal tick      : std_logic                       := '0';
+    signal at_end    : std_logic                       := '0';
     signal pressed   : std_logic_vector(3 downto 0)    := (others => '0');
     signal sel       : unsigned(1 downto 0);
     signal idx       : unsigned(1 downto 0);
@@ -105,15 +108,19 @@ architecture rtl of pwm is
 begin
 
     -- sample counter increments on clock that wraps every 2**CNT_BITS clocks
+    -- tick is registered (set one count early) so it is one fitter input
+    -- instead of a 12-bit compare copied into every equation
     counter: process(CLK)
     begin
         if rising_edge(CLK) then
             cnt <= cnt + 1;
+            if cnt = CNT_MAX - 1 then
+                tick <= '1';
+            else
+                tick <= '0';
+            end if;
         end if;
     end process counter;
-
-    -- last clock of sample period
-    tick <= '1' when cnt = CNT_MAX else '0';
 
     -- sync switches and flip to active high b0 = sw4 ... b3 = sw1
     sync_switches: process(CLK)
@@ -146,6 +153,19 @@ begin
         "11" & x"C000" when "10",       -- sw2: 0x7C000
         "00" & x"0000" when others;     -- sw1: 0x80000 
 
+    -- registered end-of-message flag, addr only changes on ticks so it is
+    -- always valid by the next tick
+    end_check: process(CLK)
+    begin
+        if rising_edge(CLK) then
+            if addr = msg_end then
+                at_end <= '1';
+            else
+                at_end <= '0';
+            end if;
+        end if;
+    end process end_check;
+
     -- player fsm that shoudl only acts on ticks
     control: process(CLK)
     begin
@@ -162,7 +182,7 @@ begin
                         state  <= PLAY;
                     end if;
 
-                elsif addr = msg_end then
+                elsif at_end = '1' then
                     -- end of message -> repeat if its switch is held, else idle
                     if pressed(to_integer(msg)) = '1' then
                         addr  <= msg_start;
@@ -180,14 +200,15 @@ begin
         end if;
     end process control;
 
-    -- pwm- > high while (ramp < sample) and low when idle 
+    -- pwm: set at ramp = 0, clear at ramp = sample (high for sample clocks),
+    -- low when idle; equality compares are much cheaper on a cpld than <
     pwm_gen: process(CLK)
     begin
         if rising_edge(CLK) then
-            if state = PLAY and cnt(7 downto 0) < sample then
-                pwm_out <= '1';
-            else
+            if state = IDLE or cnt(7 downto 0) = sample then
                 pwm_out <= '0';
+            elsif cnt(7 downto 0) = 0 then
+                pwm_out <= '1';
             end if;
         end if;
     end process pwm_gen;
