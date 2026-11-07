@@ -43,12 +43,12 @@ architecture tb of pwm_tb is
     signal CLK   : std_logic := '0';
     signal done  : boolean   := false;
 
-    signal swA   : std_logic_vector(1 to 4) := "1111";   -- uut_full sw1..sw4
+    signal swA   : std_logic_vector(1 to 4) := "0000";   -- uut_full sw1..sw4
     signal dataA : std_logic_vector(7 downto 0);
     signal addrA : std_logic_vector(18 downto 0);
     signal pwmA  : std_logic;
 
-    signal swB   : std_logic_vector(1 to 4) := "1111";   -- uut_fast sw1..sw4
+    signal swB   : std_logic_vector(1 to 4) := "0000";   -- uut_fast sw1..sw4
     signal dataB : std_logic_vector(7 downto 0);
     signal addrB : std_logic_vector(18 downto 0);
     signal pwmB  : std_logic;
@@ -96,11 +96,11 @@ begin
         assert now >= 300 us report "output or address changed while idle";
 
         -- test 2: uut_full plays sw2 message (58000)
-        swA(2) <= '0';
+        swA(2) <= '1';
         wait until unsigned(addrA) = 16#58000# for 300 us;
         assert unsigned(addrA) = 16#58000# report "sw2 did not load 58000";
         t0 := now;
-        swA(2) <= '1';
+        swA(2) <= '0';
 
         wait until pwmA = '1' or unsigned(addrA) = 16#58001# for 200 us;
         assert pwmA = '0' report "output during first (fetch) period";
@@ -119,10 +119,10 @@ begin
         assert now - t1 = 164 * T_CLK report "17th pulse is not next sample (164 clocks)";
 
         -- test 3: uut_fast plays sw1 message once (7C000-7FFFF)
-        swB(1) <= '0';
+        swB(1) <= '1';
         wait until unsigned(addrB) = 16#7C000# for 2 * T_SAMPLE;
         assert unsigned(addrB) = 16#7C000# report "sw1 did not load 7C000";
-        swB(1) <= '1';
+        swB(1) <= '0';
 
         steps := 0;
         while unsigned(addrB) /= 16#40000# loop
@@ -138,13 +138,13 @@ begin
             report "not idle after message ended";
 
         -- test 4: uut_fast, sw1 held through the end -> repeats
-        swB(1) <= '0';
+        swB(1) <= '1';
         wait until unsigned(addrB) = 16#7C000# for 2 * T_SAMPLE;
         wait until unsigned(addrB) = 16#40000# for 16#4001# * T_SAMPLE;
         assert unsigned(addrB) = 16#40000# report "sw1 message did not reach its end";
         wait on addrB for 2 * T_SAMPLE;
         assert unsigned(addrB) = 16#7C000# report "held switch did not repeat message";
-        swB(1) <= '1';
+        swB(1) <= '0';
 
         done <= true;
         wait;

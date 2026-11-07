@@ -34,7 +34,7 @@ architecture tb of pwm_ec_tb is
 
     signal CLK    : std_logic := '0';
     signal done   : boolean   := false;
-    signal sw     : std_logic_vector(1 to 4) := "1111";     -- sw1..sw4
+    signal sw     : std_logic_vector(1 to 4) := "0000";     -- sw1..sw4
     signal data   : std_logic_vector(7 downto 0);
     signal addr   : std_logic_vector(18 downto 0);
     signal pwm    : std_logic;
@@ -98,9 +98,9 @@ begin
         assert pwm = '0' report "output while idle";
 
         -- sw4 normal: silent first period, then 16 pulses of 165
-        sw(4) <= '0';
-        wait on addr;                               -- end of first period
         sw(4) <= '1';
+        wait on addr;                               -- end of first period
+        sw(4) <= '0';
         wait for 2 * T_CLK;
         assert highs = 0 report "first (fetch) period not silent";
         wait on addr;
@@ -108,17 +108,17 @@ begin
         assert highs = 2640 and pulses = 16 report "normal mode wrong";
 
         -- sw3 no oversampling now one pulse of 165 * 16 clocks
-        sw(3) <= '0';
-        wait on addr;                               -- mode changes here
         sw(3) <= '1';
+        wait on addr;                               -- mode changes here
+        sw(3) <= '0';
         wait on addr;
         wait for 2 * T_CLK;
         assert highs = 2640 and pulses = 1 report "no-oversampling mode wrong";
 
       
-        sw(2) <= '0';
-        wait on addr;
         sw(2) <= '1';
+        wait on addr;
+        sw(2) <= '0';
         wait on addr;
         wait for 2 * T_CLK;
         assert highs >= 2640 and highs <= 2656 and pulses > 16

@@ -23,7 +23,8 @@
 --
 --  Inputs:
 --      CLK          - 32 MHz clock
---      SW1..SW4     - message switches, active low (pressed = '0')
+--      SW1..SW4     - message switches, active high (pressed = '1'; normally
+--                     closed contact holds the pin low until pressed)
 --      AudioData    - EPROM data
 --
 --  Outputs:
@@ -61,6 +62,7 @@
 --      11/07/26  Aadi   Final TB Check
 --      11/07/26  Aadi   Start/end address lookup tables
 --      11/07/26  Aadi   Registered tick/at_end, equality pwm to fit XC9572
+--      11/07/26  Aadi   Switches are active high (fixed polarity)
 --
 --------------------------------------------------------------------------------
 
@@ -122,11 +124,11 @@ begin
         end if;
     end process counter;
 
-    -- sync switches and flip to active high b0 = sw4 ... b3 = sw1
+    -- sync switches (active high) b0 = sw4 ... b3 = sw1
     sync_switches: process(CLK)
     begin
         if rising_edge(CLK) then
-            pressed <= not (SW1 & SW2 & SW3 & SW4);
+            pressed <= SW1 & SW2 & SW3 & SW4;
         end if;
     end process sync_switches;
 

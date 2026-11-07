@@ -22,7 +22,7 @@
 --
 --  Inputs:
 --      CLK          - 32 MHz clock
---      SW1..SW4     - switches, active low (pressed = '0')
+--      SW1..SW4     - switches, active high (pressed = '1')
 --      AudioData    - EPROM data
 --
 --  Outputs:
@@ -53,6 +53,7 @@
 --      11/06/26  Aadi   Lint Pass
 --      11/07/26  Aadi   TB Pass
 --      11/07/26  Aadi   Documentation Carry Over
+--      11/07/26  Aadi   Switches are active high (fixed polarity)
 --
 --------------------------------------------------------------------------------
 
@@ -107,11 +108,11 @@ begin
     -- last clock of sample period
     tick <= '1' when cnt = 4095 else '0';
 
-    -- sync switches and flip to active high b0 = sw4 ... b3 = sw1
+    -- sync switches (active high) b0 = sw4 ... b3 = sw1
     sync_switches: process(CLK)
     begin
         if rising_edge(CLK) then
-            pressed <= not (SW1 & SW2 & SW3 & SW4);
+            pressed <= SW1 & SW2 & SW3 & SW4;
         end if;
     end process sync_switches;
 
