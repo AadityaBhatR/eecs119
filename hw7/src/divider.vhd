@@ -36,6 +36,7 @@
 --
 -- edits:
 --   11/15/26  aadi  first version, all extra credit, sims clean
+--   11/15/26  aadi  polarity as generics, segments active low per schematic
 ------------------------------------------------------------------------------
 
 library ieee;
@@ -43,6 +44,12 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity SerialDivider is
+    generic(
+        -- output polarity. the board's segment ULN2003 + pull ups mean a '0'
+        --   lights a segment, the digit ULN2003s mean a '1' lights a digit
+        SEG_ON : std_logic := '0';
+        DIG_ON : std_logic := '1'
+    );
     port(
         clk        : in  std_logic;                     -- 1 MHz clock
         DivisorSel : in  std_logic;                     -- slide switch
@@ -56,11 +63,6 @@ end SerialDivider;
 
 
 architecture behavioral of SerialDivider is
-
-    -- polarity of the outputs, CHECK THESE against the board
-    --   (segdec.pds / dec412.pds or just flip them if the display is inverted)
-    constant SEG_ON : std_logic := '1';     -- level that lights a segment
-    constant DIG_ON : std_logic := '1';     -- level that turns a digit on
 
     -- keypad remap: index is row*4 + col of the key, value is the hex digit
     --   it should enter. identity right now, fill in the natural layout

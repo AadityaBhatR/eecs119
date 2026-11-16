@@ -63,6 +63,7 @@ architecture tb of divider_tb is
 begin
 
     uut : entity work.SerialDivider
+        generic map(SEG_ON => '1', DIG_ON => '1')   -- active high for easy decoding
         port map(clk, DivisorSel, nCalc, KeyCol, KeyRow, Segment, Digit);
 
     clk <= not clk after 500 ns when not done;      -- 1 MHz
