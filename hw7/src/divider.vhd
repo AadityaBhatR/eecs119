@@ -13,14 +13,16 @@
 --     - keypad remap (KEYMAP table)
 --     - segment decoding in the cpld (16V8 not used)
 --     - digit decoding in the cpld (29M16 not used), digits are a one-hot ring
---     - dividend + divisor preserved, all shown with the quotient
---     - remainder, slide switch picks quotient or remainder on digits 8-11
---     - divide by zero shows ---- on digits 8-11
+--     - (PRESERVE only) dividend + divisor preserved, all shown with the
+--       quotient, slide switch picks quotient or remainder on digits 8-11
+--     - remainder (without PRESERVE: quotient on 0-3, remainder on 8-11)
+--     - divide by zero shows ---- on the quotient digits
 --     - display only blanks for the ~1 ms the divide takes
 --
---   display: digits 0-3 dividend, 4-7 divisor, 8-11 quotient/remainder,
---   digit 0 of each group is the most significant nibble. ~1 ms per digit,
---   ~12 ms refresh.
+--   display: digits 0-3 dividend (quotient after a divide if not PRESERVE),
+--   4-7 divisor, 8-11 quotient/remainder (PRESERVE) or remainder. digit 0 of
+--   each group is the most significant nibble. ~1 ms per digit, ~12 ms
+--   refresh.
 --
 -- inputs:
 --   clk        - 1 MHz board clock
@@ -37,6 +39,8 @@
 -- edits:
 --   11/15/26  aadi  first version, all extra credit, sims clean
 --   11/15/26  aadi  polarity as generics, segments active low per schematic
+--   11/15/26  aadi  PRESERVE generic (off = 16 fewer flops), calc button
+--                   sampled once a refresh
 ------------------------------------------------------------------------------
 
 library ieee;
@@ -48,7 +52,12 @@ entity SerialDivider is
         -- output polarity. the board's segment ULN2003 + pull ups mean a '0'
         --   lights a segment, the digit ULN2003s mean a '1' lights a digit
         SEG_ON : std_logic := '0';
-        DIG_ON : std_logic := '1'
+        DIG_ON : std_logic := '1';
+        -- PRESERVE = true:  separate dividend register, shows dividend,
+        --   divisor and quotient/remainder (switch) at the end. +16 flops
+        -- PRESERVE = false: dividend register turns into the quotient
+        --   (classic shared R:Q shift), shows quotient, divisor, remainder
+        PRESERVE : boolean := false
     );
     port(
         clk        : in  std_logic;                     -- 1 MHz clock
@@ -171,9 +180,11 @@ begin
         for p in 0 to 11 loop
             dq := (p + 1) mod 12;           -- digit this ring bit loads for
             if dq < 4 then
-                val := N;
+                if PRESERVE then val := N; else val := Q; end if;
             elsif dq < 8 then
                 val := D;
+            elsif not PRESERVE then
+                val := R;
             elsif DivisorSel = '1' then
                 val := R;
             else
@@ -187,7 +198,9 @@ begin
         NextNib <= nib;
     end process nibmux;
 
-    Grp2 <= Ring(8) or Ring(9) or Ring(10) or Ring(11);
+    -- group that shows the quotient (gets the ---- on divide by zero)
+    Grp2 <= (Ring(8) or Ring(9) or Ring(10) or Ring(11)) when PRESERVE else
+            (Ring(0) or Ring(1) or Ring(2)  or Ring(3));
 
     -- segment decode, blank while dividing, dashes for divide by zero
     segdec : process(Busy, DivZero, Grp2, Lat)
@@ -219,8 +232,12 @@ begin
             if Busy = '1' then
                 -- dividing, 16 rounds of 64 clocks
                 if Cyc = 0 then             -- shift R:N left, Q left
-                    R    <= R(14 downto 0) & N(15);
-                    N    <= N(14 downto 0) & N(15);     -- rotate, comes back
+                    if PRESERVE then
+                        R <= R(14 downto 0) & N(15);
+                        N <= N(14 downto 0) & N(15);    -- rotate, comes back
+                    else
+                        R <= R(14 downto 0) & Q(15);    -- dividend bits leave
+                    end if;                             -- Q as quotient fills
                     Q    <= Q(14 downto 0) & '0';
                     Borrow <= '0';
 
@@ -265,7 +282,11 @@ begin
                     if DivisorSel = '1' then
                         D <= D(11 downto 0) & KeyCode;
                     else
-                        N <= N(11 downto 0) & KeyCode;
+                        if PRESERVE then
+                            N <= N(11 downto 0) & KeyCode;
+                        else
+                            Q <= Q(11 downto 0) & KeyCode;
+                        end if;
                     end if;
                 end if;
 
@@ -286,10 +307,12 @@ begin
                     Seen <= Seen or Hit;
                 end if;
 
-                -- calc button, sampled once a digit time so bounce is
-                --   ignored, divide on the press
-                CalcS <= not nCalc;
-                if nCalc = '0' and CalcS = '0' then
+                -- calc button, sampled once a refresh (~12 ms) so bounce
+                --   can't start a second divide, divide on the press
+                if Ring(11) = '1' then
+                    CalcS <= not nCalc;
+                end if;
+                if Ring(11) = '1' and nCalc = '0' and CalcS = '0' then
                     Busy    <= '1';
                     R       <= (others => '0');
                     Borrow  <= '0';

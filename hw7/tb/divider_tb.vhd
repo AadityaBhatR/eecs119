@@ -20,6 +20,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity divider_tb is
+    generic(PRESERVE : boolean := false);   -- match the design's setting
 end divider_tb;
 
 architecture tb of divider_tb is
@@ -63,7 +64,7 @@ architecture tb of divider_tb is
 begin
 
     uut : entity work.SerialDivider
-        generic map(SEG_ON => '1', DIG_ON => '1')   -- active high for easy decoding
+        generic map(SEG_ON => '1', DIG_ON => '1', PRESERVE => PRESERVE)   -- active high for easy decoding
         port map(clk, DivisorSel, nCalc, KeyCol, KeyRow, Segment, Digit);
 
     clk <= not clk after 500 ns when not done;      -- 1 MHz
@@ -140,43 +141,45 @@ begin
             return v;
         end function;
 
-        procedure check(name : string; n, d : integer) is
-            variable eq, er : integer;
+        procedure fail(msg : string) is
         begin
-            -- quotient view
+            report msg severity error;
+            errors <= errors + 1;
+            wait for 0 ns;
+        end procedure;
+
+        -- quotient/remainder/divisor groups depend on PRESERVE:
+        --   PRESERVE:     0 = dividend, 1 = divisor, 2 = quot (sw 0)/rem (sw 1)
+        --   not PRESERVE: 0 = quotient, 1 = divisor, 2 = remainder
+        procedure check(name : string; n, d : integer) is
+            variable qg : integer;
+        begin
+            if PRESERVE then qg := 2; else qg := 0; end if;
             DivisorSel <= '0'; wait for 30 ms;
             if d = 0 then
-                for i in 8 to 11 loop
+                for i in 4*qg to 4*qg + 3 loop
                     if shown(i) /= 16 then
-                        report name & ": expected ---- for divide by zero"
-                            severity error;
-                        errors <= errors + 1; wait for 0 ns;
+                        fail(name & ": expected ---- for divide by zero");
                         exit;
                     end if;
                 end loop;
-            else
-                eq := n / d;
-                if grp(shown, 2) /= eq then
-                    report name & ": quotient shows " & integer'image(grp(shown, 2))
-                        & " expected " & integer'image(eq) severity error;
-                    errors <= errors + 1; wait for 0 ns;
-                end if;
+            elsif grp(shown, qg) /= n / d then
+                fail(name & ": quotient shows " & integer'image(grp(shown, qg))
+                     & " expected " & integer'image(n / d));
             end if;
-            if grp(shown, 0) /= n or grp(shown, 1) /= d then
-                report name & ": dividend/divisor not preserved, shows "
-                    & integer'image(grp(shown, 0)) & " / "
-                    & integer'image(grp(shown, 1)) severity error;
-                errors <= errors + 1; wait for 0 ns;
+            if grp(shown, 1) /= d then
+                fail(name & ": divisor shows " & integer'image(grp(shown, 1)));
             end if;
-            -- remainder view
-            DivisorSel <= '1'; wait for 30 ms;
-            if d /= 0 then
-                er := n mod d;
-                if grp(shown, 2) /= er then
-                    report name & ": remainder shows " & integer'image(grp(shown, 2))
-                        & " expected " & integer'image(er) severity error;
-                    errors <= errors + 1; wait for 0 ns;
-                end if;
+            if PRESERVE and grp(shown, 0) /= n then
+                fail(name & ": dividend not preserved, shows "
+                     & integer'image(grp(shown, 0)));
+            end if;
+            if PRESERVE then
+                DivisorSel <= '1'; wait for 30 ms;
+            end if;
+            if d /= 0 and grp(shown, 2) /= n mod d then
+                fail(name & ": remainder shows " & integer'image(grp(shown, 2))
+                     & " expected " & integer'image(n mod d));
             end if;
             report name & " checked";
         end procedure;
@@ -222,16 +225,20 @@ begin
         calc;
         check("12345/00987 (overflow entry)", 16#2345#, 16#0987#);
 
-        -- recalc with nothing changed should give the same answer
+        -- recalc: same answer if the dividend is kept, otherwise it divides
+        --   the quotient again (2345/0987 = 3, then 3/0987 = 0 r 3)
         calc;
-        check("recalc 2345/0987", 16#2345#, 16#0987#);
+        if PRESERVE then
+            check("recalc 2345/0987", 16#2345#, 16#0987#);
+        else
+            check("recalc 0003/0987", 16#0003#, 16#0987#);
+        end if;
 
         -- blanked while dividing, but not the whole time the button is held
         nCalc <= '0';
         wait for 5 ms;
         if shown(8) = 17 then
-            report "display still blank while calc held" severity error;
-            errors <= errors + 1;
+            fail("display still blank while calc held");
         end if;
         nCalc <= '1';
         wait for 10 ms;
