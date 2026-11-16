@@ -20,7 +20,7 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 entity divider_tb is
-    generic(PRESERVE : boolean := false);   -- match the design's setting
+    generic(PRESERVE : boolean := true);    -- dividend is always kept now
 end divider_tb;
 
 architecture tb of divider_tb is
@@ -64,7 +64,7 @@ architecture tb of divider_tb is
 begin
 
     uut : entity work.SerialDivider
-        generic map(SEG_ON => '1', DIG_ON => '1', PRESERVE => PRESERVE)   -- active high for easy decoding
+        generic map(SEG_ON => '1', DIG_ON => '1')   -- active high for easy decoding
         port map(clk, DivisorSel, nCalc, KeyCol, KeyRow, Segment, Digit);
 
     clk <= not clk after 500 ns when not done;      -- 1 MHz
@@ -233,6 +233,14 @@ begin
         else
             check("recalc 0003/0987", 16#0003#, 16#0987#);
         end if;
+
+        -- flip the switch at odd times (mid divide too), nothing should get
+        --   scrambled
+        for i in 1 to 25 loop
+            DivisorSel <= not DivisorSel;
+            wait for 2.37 ms;
+        end loop;
+        check("after switch flipping 2345/0987", 16#2345#, 16#0987#);
 
         -- blanked while dividing, but not the whole time the button is held
         nCalc <= '0';
