@@ -52,6 +52,7 @@
 --                   quotient register, so everything fits again
 --   11/23/26  aadi  key release needs a whole quiet refresh (~12 ms) instead
 --                   of one scan (~4 ms), double entries on the real board
+--   11/23/26  aadi  keypad remap filled in, keys now read across the rows
 ------------------------------------------------------------------------------
 
 library ieee;
@@ -80,13 +81,18 @@ end SerialDivider;
 architecture behavioral of SerialDivider is
 
     -- keypad remap: index is scanline*4 + senseline of the key, value is the
-    --   hex digit it should enter. identity right now, fill in from the board
+    --   hex digit it should enter. the raw codes go down the columns
+    --   (0 4 8 C / 1 5 9 D / ...), this flips them so the keypad reads
+    --   across the rows:   0 1 2 3
+    --                      4 5 6 7
+    --                      8 9 A B
+    --                      C D E F
     type keymap_t is array (0 to 15) of std_logic_vector(3 downto 0);
     constant KEYMAP : keymap_t := (
-        x"0", x"1", x"2", x"3",
-        x"4", x"5", x"6", x"7",
-        x"8", x"9", x"A", x"B",
-        x"C", x"D", x"E", x"F");
+        x"0", x"4", x"8", x"C",
+        x"1", x"5", x"9", x"D",
+        x"2", x"6", x"A", x"E",
+        x"3", x"7", x"B", x"F");
 
     -- 7 seg patterns, bits are a b c d e f g
     type segtab_t is array (0 to 15) of std_logic_vector(6 downto 0);

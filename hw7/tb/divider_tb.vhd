@@ -89,11 +89,12 @@ begin
 
     stim : process
 
-        -- bouncy key press of hex digit k (identity keymap: row k/4, col k%4)
+        -- bouncy key press of hex digit k. with the remap, digit k is on
+        --   scan line k mod 4 and sense line k / 4
         procedure key(k : integer) is
         begin
-            kRow <= k / 4;
-            kCol <= k mod 4;
+            kRow <= k mod 4;
+            kCol <= k / 4;
             contact <= '1'; wait for 300 us;        -- fast press bounce
             contact <= '0'; wait for 500 us;
             contact <= '1'; wait for 400 us;
