@@ -50,6 +50,8 @@
 --   11/15/26  aadi  PRESERVE generic, didn't fit with it on (127/128)
 --   11/15/26  aadi  rewrite: quotient made on the fly each refresh, no
 --                   quotient register, so everything fits again
+--   11/23/26  aadi  key release needs a whole quiet refresh (~12 ms) instead
+--                   of one scan (~4 ms), double entries on the real board
 ------------------------------------------------------------------------------
 
 library ieee;
@@ -115,7 +117,7 @@ architecture behavioral of SerialDivider is
     signal Valid   : std_logic := '0';      -- calc pressed since last key
     signal CalcS   : std_logic := '0';      -- calc button last sample
     signal KeyDown : std_logic := '0';      -- a key is being held
-    signal Seen    : std_logic := '0';      -- key seen during this scan
+    signal Seen    : std_logic := '0';      -- key seen during this refresh
 
     -- combinational stuff
     signal Tick     : std_logic;            -- end of a digit time
@@ -296,8 +298,9 @@ begin
                     end if;
                 end if;
 
-                -- keypad: released after a full scan with nothing pressed
-                if RowSel(3) = '1' then     -- end of a full scan
+                -- keypad: released after a whole refresh (3 full scans,
+                --   ~12 ms) with nothing pressed, so chatter can't re-enter
+                if Ring(11) = '1' then      -- end of a refresh
                     Seen <= '0';
                     if (Seen or Hit) = '0' then
                         KeyDown <= '0';

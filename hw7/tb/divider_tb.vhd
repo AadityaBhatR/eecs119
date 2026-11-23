@@ -94,16 +94,20 @@ begin
         begin
             kRow <= k / 4;
             kCol <= k mod 4;
-            contact <= '1'; wait for 300 us;        -- press bounce
+            contact <= '1'; wait for 300 us;        -- fast press bounce
             contact <= '0'; wait for 500 us;
             contact <= '1'; wait for 400 us;
             contact <= '0'; wait for 200 us;
+            contact <= '1'; wait for 5 ms;          -- slow chatter: closes,
+            contact <= '0'; wait for 5 ms;          --   opens for 5 ms, closes
             contact <= '1'; wait for 15 ms;         -- held
-            contact <= '0'; wait for 300 us;        -- release bounce
+            contact <= '0'; wait for 300 us;        -- fast release bounce
             contact <= '1'; wait for 200 us;
             contact <= '0'; wait for 400 us;
             contact <= '1'; wait for 300 us;
-            contact <= '0'; wait for 20 ms;         -- released
+            contact <= '0'; wait for 5 ms;          -- slow chatter on release
+            contact <= '1'; wait for 5 ms;
+            contact <= '0'; wait for 40 ms;         -- released
         end procedure;
 
         procedure enter(v : integer; ndig : integer; sel : std_logic) is
