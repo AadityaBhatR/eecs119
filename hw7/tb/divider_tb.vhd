@@ -99,16 +99,18 @@ begin
             contact <= '0'; wait for 500 us;
             contact <= '1'; wait for 400 us;
             contact <= '0'; wait for 200 us;
-            contact <= '1'; wait for 5 ms;          -- slow chatter: closes,
-            contact <= '0'; wait for 5 ms;          --   opens for 5 ms, closes
-            contact <= '1'; wait for 15 ms;         -- held
+            contact <= '1'; wait for 5 ms;          -- slow chatter
+            contact <= '0'; wait for 5 ms;
+            contact <= '1'; wait for 30 ms;         -- held...
+            contact <= '0'; wait for 10 ms;         -- ...wobbles open 10 ms...
+            contact <= '1'; wait for 30 ms;         -- ...still held
             contact <= '0'; wait for 300 us;        -- fast release bounce
             contact <= '1'; wait for 200 us;
             contact <= '0'; wait for 400 us;
             contact <= '1'; wait for 300 us;
-            contact <= '0'; wait for 5 ms;          -- slow chatter on release
-            contact <= '1'; wait for 5 ms;
-            contact <= '0'; wait for 40 ms;         -- released
+            contact <= '0'; wait for 18 ms;         -- rough release: lets go,
+            contact <= '1'; wait for 6 ms;          --   brushes it 18 ms later
+            contact <= '0'; wait for 60 ms;         -- released
         end procedure;
 
         procedure enter(v : integer; ndig : integer; sel : std_logic) is
@@ -189,9 +191,17 @@ begin
             report name & " checked";
         end procedure;
 
+        procedure glitch(k : integer) is      -- 2 ms brush of a key
+        begin
+            kRow <= k mod 4;  kCol <= k / 4;
+            contact <= '1'; wait for 2 ms;
+            contact <= '0'; wait for 60 ms;
+        end procedure;
+
         procedure test(name : string; n, d : integer) is
         begin
             enter(n, 4, '0');
+            glitch(15);                         -- must not shift in an F
             enter(d, 4, '1');
             calc;
             check(name, n, d);

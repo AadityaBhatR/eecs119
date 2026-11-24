@@ -53,6 +53,9 @@
 --   11/23/26  aadi  key release needs a whole quiet refresh (~12 ms) instead
 --                   of one scan (~4 ms), double entries on the real board
 --   11/23/26  aadi  keypad remap filled in, keys now read across the rows
+--   11/23/26  aadi  strict debounce: key must show up in 2 refreshes in a row
+--                   to count and be gone for 2 refreshes to release. calc
+--                   edge flop dropped to pay for it (same flop count)
 ------------------------------------------------------------------------------
 
 library ieee;
@@ -121,8 +124,16 @@ architecture behavioral of SerialDivider is
     signal RemMode : std_logic := '0';      -- switch, latched for a whole
                                             --   divide so N stays aligned
     signal Valid   : std_logic := '0';      -- calc pressed since last key
-    signal CalcS   : std_logic := '0';      -- calc button last sample
-    signal KeyDown : std_logic := '0';      -- a key is being held
+    -- keypad debounce, a little state machine stepped once a refresh:
+    --   IDLE  nothing pressed
+    --   ARMED key seen for one whole refresh, enter it on the next sighting
+    --   DOWN  key entered, waiting for it to be let go
+    --   REL1  one quiet refresh so far, one more and it's IDLE again
+    signal KState  : std_logic_vector(1 downto 0) := "00";
+    constant K_IDLE  : std_logic_vector(1 downto 0) := "00";
+    constant K_ARMED : std_logic_vector(1 downto 0) := "01";
+    constant K_DOWN  : std_logic_vector(1 downto 0) := "11";
+    constant K_REL1  : std_logic_vector(1 downto 0) := "10";
     signal Seen    : std_logic := '0';      -- key seen during this refresh
 
     -- combinational stuff
@@ -290,13 +301,14 @@ begin
                     RemMode <= DivisorSel;
                 end if;
 
-                -- keypad: new key press shifts a nibble in. not while N is
-                --   part way through its rotation (digit times 7-9), that
-                --   line just gets caught on a later scan
-                if Hit = '1' and KeyDown = '0' and
+                -- keypad: a key that was already seen for a whole refresh
+                --   (ARMED) gets entered the next time its line is scanned.
+                --   not while N is part way through its rotation (digit
+                --   times 7-9), that line just gets caught on a later scan
+                if Hit = '1' and KState = K_ARMED and
                    (Ring(7) or Ring(8) or Ring(9)) = '0' then
-                    KeyDown <= '1';
-                    Valid   <= '0';
+                    KState <= K_DOWN;
+                    Valid  <= '0';
                     if DivisorSel = '1' then
                         D <= D(11 downto 0) & KeyCode;
                     else
@@ -304,23 +316,32 @@ begin
                     end if;
                 end if;
 
-                -- keypad: released after a whole refresh (3 full scans,
-                --   ~12 ms) with nothing pressed, so chatter can't re-enter
+                -- keypad: once a refresh (3 full scans, ~12 ms) step the
+                --   debounce. pressing needs the key in 2 refreshes in a
+                --   row, letting go needs 2 refreshes in a row with nothing
                 if Ring(11) = '1' then      -- end of a refresh
                     Seen <= '0';
-                    if (Seen or Hit) = '0' then
-                        KeyDown <= '0';
+                    if (Seen or Hit) = '1' then             -- key this refresh
+                        if KState = K_IDLE then
+                            KState <= K_ARMED;
+                        elsif KState = K_REL1 then
+                            KState <= K_DOWN;               -- wasn't let go
+                        end if;
+                    else                                    -- quiet refresh
+                        if KState = K_DOWN then
+                            KState <= K_REL1;
+                        else
+                            KState <= K_IDLE;               -- ARMED glitch or
+                        end if;                             --   REL1 -> done
                     end if;
                 else
                     Seen <= Seen or Hit;
                 end if;
 
-                -- calc button, sampled once a refresh so bounce can't count
-                if Ring(11) = '1' then
-                    CalcS <= not nCalc;
-                    if nCalc = '0' and CalcS = '0' then
-                        Valid <= '1';
-                    end if;
+                -- calc button, sampled once a refresh so bounce can't
+                --   matter. setting Valid again while it's held is harmless
+                if Ring(11) = '1' and nCalc = '0' then
+                    Valid <= '1';
                 end if;
             end if;
 
